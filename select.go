@@ -2,12 +2,13 @@ package gsql
 
 import (
 	"context"
-	"reflect"
+	"github.com/DaHuangQwQ/gweb/internal/errs"
 	"strings"
 )
 
 type Selector[T any] struct {
 	table string
+	model *model
 	where []Predicate
 	sb    strings.Builder
 	args  []any
@@ -24,12 +25,16 @@ func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
 }
 
 func (s *Selector[T]) Build() (*Query, error) {
+	var err error
+	s.model, err = ParseModel(new(T))
+	if err != nil {
+		return nil, err
+	}
+
 	s.sb.WriteString("SELECT * FROM ")
 
 	if s.table == "" {
-		var t T
-		tye := reflect.TypeOf(t)
-		s.From(tye.Name())
+		s.From(s.model.tableName)
 	}
 	s.sb.WriteString(s.table)
 
@@ -41,7 +46,10 @@ func (s *Selector[T]) Build() (*Query, error) {
 			p = p.And(s.where[i])
 		}
 
-		s.buildExpression(p)
+		er := s.buildExpression(p)
+		if er != nil {
+			return nil, er
+		}
 	}
 
 	s.sb.WriteByte(';')
@@ -59,16 +67,19 @@ func (s *Selector[T]) addArgs(val any) {
 	s.args = append(s.args, val)
 }
 
-func (s *Selector[T]) buildExpression(expr Expression) {
+func (s *Selector[T]) buildExpression(expr Expression) error {
 	switch exp := expr.(type) {
 	case nil:
-		return
+		return nil
 	case Predicate:
 		_, ok := exp.left.(Predicate)
 		if ok {
 			s.sb.WriteByte('(')
 		}
-		s.buildExpression(exp.left)
+		err := s.buildExpression(exp.left)
+		if err != nil {
+			return err
+		}
 		if ok {
 			s.sb.WriteByte(')')
 		}
@@ -80,17 +91,29 @@ func (s *Selector[T]) buildExpression(expr Expression) {
 		if ok {
 			s.sb.WriteByte('(')
 		}
-		s.buildExpression(exp.right)
+		err = s.buildExpression(exp.right)
+		if err != nil {
+			return err
+		}
 		if ok {
 			s.sb.WriteByte(')')
 		}
+		return nil
 	case Column:
+		fd, ok := s.model.fields[exp.Name]
+		if !ok {
+			return errs.NewErrUnknownField(exp.Name)
+		}
 		s.sb.WriteByte('`')
-		s.sb.WriteString(exp.Name)
+		s.sb.WriteString(fd.colName)
 		s.sb.WriteByte('`')
+		return nil
 	case Value:
 		s.sb.WriteByte('?')
 		s.addArgs(exp.val)
+		return nil
+	default:
+		return errs.ErrInvalidExpression
 	}
 }
 
