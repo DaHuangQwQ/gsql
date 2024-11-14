@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 type model struct {
@@ -16,7 +17,61 @@ type field struct {
 	colName string
 }
 
-func ParseModel(entity any) (*model, error) {
+// registry 元数据的注册中心
+type registry struct {
+	models sync.Map
+	//lock   sync.RWMutex
+}
+
+func newRegistry() *registry {
+	return &registry{
+		models: sync.Map{},
+	}
+}
+
+func (r *registry) get(val any) (*model, error) {
+	typ := reflect.TypeOf(val)
+	m, ok := r.models.Load(typ)
+	if ok {
+		return m.(*model), nil
+	}
+	m, err := r.ParseModel(val)
+	if err != nil {
+		return nil, err
+	}
+	r.models.Store(typ, m)
+	return m.(*model), nil
+}
+
+// get RWMutex double check
+//func (r *registry) getV1(val any) (*model, error) {
+//	typ := reflect.TypeOf(val)
+//
+//	r.lock.RLock()
+//	m, ok := r.models[typ]
+//	r.lock.RUnlock()
+//	if ok {
+//		return m, nil
+//	}
+//
+//	r.lock.Lock()
+//	defer r.lock.Unlock()
+//	m, ok = r.models[typ]
+//	if ok {
+//		return m, nil
+//	}
+//
+//	var er error
+//	m, er = r.ParseModel(val)
+//	if er != nil {
+//		return nil, er
+//	}
+//	r.models[typ] = m
+//
+//	return m, nil
+//}
+
+func (r *registry) ParseModel(entity any) (*model, error) {
 	tye := reflect.TypeOf(entity)
 
 	for tye.Kind() == reflect.Pointer {
