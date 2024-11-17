@@ -35,7 +35,7 @@ func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
 
 func (s *Selector[T]) Build() (*Query, error) {
 	var err error
-	s.model, err = s.db.r.ParseModel(new(T))
+	s.model, err = s.db.r.Register(new(T))
 	if err != nil {
 		return nil, err
 	}

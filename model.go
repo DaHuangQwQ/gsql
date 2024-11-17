@@ -8,6 +8,17 @@ import (
 	"sync"
 )
 
+const (
+	tagKeyColumn = "column"
+)
+
+type Registry interface {
+	Get(val any) (*model, error)
+	Register(val any, opts ...ModelOption) (*model, error)
+}
+
+type ModelOption func(m *model) error
+
 type model struct {
 	tableName string
 	fields    map[string]*field
@@ -29,13 +40,13 @@ func newRegistry() *registry {
 	}
 }
 
-func (r *registry) get(val any) (*model, error) {
+func (r *registry) Get(val any) (*model, error) {
 	typ := reflect.TypeOf(val)
 	m, ok := r.models.Load(typ)
 	if ok {
 		return m.(*model), nil
 	}
-	m, err := r.ParseModel(val)
+	m, err := r.Register(val)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +73,7 @@ func (r *registry) get(val any) (*model, error) {
 //	}
 //
 //	var er error
-//	m, er = r.ParseModel(val)
+//	m, er = r.Register(val)
 //	if er != nil {
 //		return nil, er
 //	}
@@ -71,7 +82,7 @@ func (r *registry) get(val any) (*model, error) {
 //	return m, nil
 //}
 
-func (r *registry) ParseModel(entity any) (*model, error) {
+func (r *registry) Register(entity any, opts ...ModelOption) (*model, error) {
 	tye := reflect.TypeOf(entity)
 
 	for tye.Kind() == reflect.Pointer {
@@ -88,14 +99,78 @@ func (r *registry) ParseModel(entity any) (*model, error) {
 
 	for i := 0; i < numFields; i++ {
 		fd := tye.Field(i)
+		tags, err := r.parseTag(fd.Tag)
+		if err != nil {
+			return nil, err
+		}
+		colName, _ := tags[tagKeyColumn]
+		if colName == "" {
+			colName = fd.Name
+		}
 		fieldMap[fd.Name] = &field{
-			colName: underscoreName(fd.Name),
+			colName: underscoreName(colName),
 		}
 	}
-	return &model{
-		tableName: underscoreName(tye.Name()),
+
+	tableName := ""
+	if val, ok := entity.(TableName); ok {
+		tableName = val.TableName()
+	}
+	if tableName == "" {
+		tableName = underscoreName(tye.Name())
+	}
+
+	res := &model{
+		tableName: tableName,
 		fields:    fieldMap,
-	}, nil
+	}
+
+	for _, opt := range opts {
+		err := opt(res)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return res, nil
+}
+
+func (r *registry) parseTag(tag reflect.StructTag) (map[string]string, error) {
+	ormTag, ok := tag.Lookup("orm")
+	if !ok {
+		return map[string]string{}, nil
+	}
+	pairs := strings.Split(ormTag, ",")
+	res := make(map[string]string, len(pairs))
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		segs := strings.Split(pair, "=")
+		if len(segs) != 2 {
+			return nil, errs.NewErrInvalidTagContent(pair)
+		}
+		key := strings.TrimSpace(segs[0])
+		val := strings.TrimSpace(segs[1])
+		res[key] = val
+	}
+	return res, nil
+}
+
+func ModelWithTableName(tableName string) ModelOption {
+	return func(m *model) error {
+		m.tableName = tableName
+		return nil
+	}
+}
+
+func ModelWithColumnName(fieldName string, colName string) ModelOption {
+	return func(m *model) error {
+		fd, ok := m.fields[fieldName]
+		if !ok {
+			return errs.NewErrUnknownField(fieldName)
+		}
+		fd.colName = colName
+		return nil
+	}
 }
 
 // underscoreName 使用正则表达式将驼峰命名转为下划线命名
