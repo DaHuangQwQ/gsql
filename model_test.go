@@ -1,260 +1,315 @@
 package gsql
 
 import (
+	"database/sql"
 	"github.com/DaHuangQwQ/gweb/internal/errs"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"reflect"
 	"testing"
 )
 
-func TestRegistry_Register(t *testing.T) {
+func Test_registry_Register(t *testing.T) {
 	testCases := []struct {
-		name string
-
-		entity any
-
+		name      string
+		entity    any
 		wantModel *model
+		fields    []*field
 		wantErr   error
-		opts      []ModelOption
 	}{
 		{
-			name:   "test model",
-			entity: TestModel{},
-			wantModel: &model{
-				tableName: "test_model",
-				fields: map[string]*field{
-					"Id": {
-						colName: "id",
-					},
-					"FirstName": {
-						colName: "first_name",
-					},
-					"LastName": {
-						colName: "last_name",
-					},
-					"Age": {
-						colName: "age",
-					},
-				},
-			},
-		},
-		{
-			name:   "test pointer to model",
+			name:   "pointer",
 			entity: &TestModel{},
 			wantModel: &model{
 				tableName: "test_model",
-				fields: map[string]*field{
-					"Id": {
-						colName: "id",
-					},
-					"FirstName": {
-						colName: "first_name",
-					},
-					"LastName": {
-						colName: "last_name",
-					},
-					"Age": {
-						colName: "age",
-					},
+			},
+			fields: []*field{
+				{
+					colName: "id",
+					goName:  "Id",
+					typ:     reflect.TypeOf(int64(0)),
 				},
-			},
-		},
-		{
-			name: "another type(not struct)",
-			entity: map[string]any{
-				"1": 1,
-			},
-			wantErr: errs.ErrInvalidType,
-		},
-		{
-			name:   "test pointer to model",
-			entity: &TestModel{},
-			wantModel: &model{
-				tableName: "test_model_t",
-				fields: map[string]*field{
-					"Id": {
-						colName: "id_t",
-					},
-					"FirstName": {
-						colName: "first_name",
-					},
-					"LastName": {
-						colName: "last_name",
-					},
-					"Age": {
-						colName: "age",
-					},
+				{
+					colName: "first_name",
+					goName:  "FirstName",
+					typ:     reflect.TypeOf(""),
 				},
-			},
-			opts: []ModelOption{
-				ModelWithTableName("test_model_t"),
-				ModelWithColumnName("Id", "id_t"),
+				{
+					colName: "last_name",
+					goName:  "LastName",
+					typ:     reflect.TypeOf(&sql.NullString{}),
+				},
+				{
+					colName: "age",
+					goName:  "Age",
+					typ:     reflect.TypeOf(int8(0)),
+				},
 			},
 		},
 	}
 
-	r := registry{}
+	r := &registry{}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			parseModel, err := r.Register(tc.entity, tc.opts...)
+			m, err := r.Register(tc.entity)
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return
 			}
-			assert.Equal(t, tc.wantModel, parseModel)
+			fieldMap := make(map[string]*field)
+			columnMap := make(map[string]*field)
+			for _, f := range tc.fields {
+				fieldMap[f.goName] = f
+				columnMap[f.colName] = f
+			}
+			tc.wantModel.fieldMap = fieldMap
+			tc.wantModel.columnMap = columnMap
+			assert.Equal(t, tc.wantModel, m)
 		})
 	}
 }
 
-func TestRegistry_Get(t *testing.T) {
+func TestRegistry_get(t *testing.T) {
 	testCases := []struct {
 		name string
 
-		entity any
-
+		entity    any
 		wantModel *model
+		fields    []*field
 		wantErr   error
 	}{
 		{
-			name:   "test model",
-			entity: TestModel{},
+			name:   "pointer",
+			entity: &TestModel{},
 			wantModel: &model{
 				tableName: "test_model",
-				fields: map[string]*field{
-					"Id": {
-						colName: "id",
-					},
-					"FirstName": {
-						colName: "first_name",
-					},
-					"LastName": {
-						colName: "last_name",
-					},
-					"Age": {
-						colName: "age",
-					},
+			},
+			fields: []*field{
+				{
+					colName: "id",
+					goName:  "Id",
+					typ:     reflect.TypeOf(int64(0)),
+				},
+				{
+					colName: "first_name",
+					goName:  "FirstName",
+					typ:     reflect.TypeOf(""),
+				},
+				{
+					colName: "last_name",
+					goName:  "LastName",
+					typ:     reflect.TypeOf(&sql.NullString{}),
+				},
+				{
+					colName: "age",
+					goName:  "Age",
+					typ:     reflect.TypeOf(int8(0)),
 				},
 			},
 		},
 		{
-			name: "test tag",
+			name: "tag",
 			entity: func() any {
 				type TagTable struct {
-					FirstName string `orm:"column = first_name_t"`
+					FirstName string `orm:"column=first_name_t"`
 				}
 				return &TagTable{}
 			}(),
 			wantModel: &model{
 				tableName: "tag_table",
-				fields: map[string]*field{
-					"FirstName": {
-						colName: "first_name_t",
-					},
+			},
+			fields: []*field{
+				{
+					colName: "first_name_t",
+					goName:  "FirstName",
+					typ:     reflect.TypeOf(""),
 				},
 			},
 		},
 		{
-			name: "test tag: empty column",
+			name: "empty column",
 			entity: func() any {
 				type TagTable struct {
-					FirstName string `orm:"column = "`
+					FirstName string `orm:"column="`
 				}
 				return &TagTable{}
 			}(),
 			wantModel: &model{
 				tableName: "tag_table",
-				fields: map[string]*field{
-					"FirstName": {
-						colName: "first_name",
-					},
+			},
+			fields: []*field{
+				{
+					colName: "first_name",
+					goName:  "FirstName",
+					typ:     reflect.TypeOf(""),
 				},
 			},
 		},
 		{
-			name: "test tag: only column",
+			name: "column only",
 			entity: func() any {
 				type TagTable struct {
-					FirstName string `orm:"column "`
+					FirstName string `orm:"column"`
 				}
 				return &TagTable{}
 			}(),
 			wantErr: errs.NewErrInvalidTagContent("column"),
 		},
 		{
-			name: "test tag: not my tag",
+			name: "ignore tag",
 			entity: func() any {
 				type TagTable struct {
-					FirstName string `orm:"abc = abc"`
+					FirstName string `orm:"abc=abc"`
 				}
 				return &TagTable{}
 			}(),
 			wantModel: &model{
 				tableName: "tag_table",
-				fields: map[string]*field{
-					"FirstName": {
-						colName: "first_name",
-					},
+			},
+			fields: []*field{
+				{
+					colName: "first_name",
+					goName:  "FirstName",
+					typ:     reflect.TypeOf(""),
 				},
 			},
 		},
 		{
-			name:   "test custom table name",
-			entity: &customTableName{},
+			name:   "table name",
+			entity: &CustomTableName{},
 			wantModel: &model{
 				tableName: "custom_table_name_t",
-				fields: map[string]*field{
-					"Name": {
-						colName: "name",
-					},
+			},
+			fields: []*field{
+				{
+					colName: "first_name",
+					goName:  "FirstName",
+					typ:     reflect.TypeOf(""),
 				},
 			},
 		},
 		{
-			name:   "test custom empty table name",
-			entity: &customEmptyTableName{},
+			name:   "table name ptr",
+			entity: &CustomTableNamePtr{},
 			wantModel: &model{
-				tableName: "custom_empty_table_name",
-				fields: map[string]*field{
-					"Name": {
-						colName: "name",
-					},
+				tableName: "custom_table_name_ptr_t",
+			},
+			fields: []*field{
+				{
+					colName: "first_name",
+					goName:  "FirstName",
+					typ:     reflect.TypeOf(""),
+				},
+			},
+		},
+		{
+			name:   "empty table name",
+			entity: &EmptyTableName{},
+			wantModel: &model{
+				tableName: "empty_table_name",
+			},
+			fields: []*field{
+				{
+					colName: "first_name",
+					goName:  "FirstName",
+					typ:     reflect.TypeOf(""),
 				},
 			},
 		},
 	}
-
 	r := newRegistry()
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			m, err := r.Get(testCase.entity)
-			assert.Equal(t, testCase.wantErr, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m, err := r.Get(tc.entity)
+			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return
 			}
-			assert.Equal(t, testCase.wantModel, m)
-			//assert.Equal(t, testCase.cacheSize, len(r.models))
-			typ := reflect.TypeOf(testCase.entity)
-			res, ok := r.models.Load(typ)
-			m = res.(*model)
+
+			fieldMap := make(map[string]*field)
+			columnMap := make(map[string]*field)
+			for _, f := range tc.fields {
+				fieldMap[f.goName] = f
+				columnMap[f.colName] = f
+			}
+			tc.wantModel.fieldMap = fieldMap
+			tc.wantModel.columnMap = columnMap
+
+			assert.Equal(t, tc.wantModel, m)
+
+			typ := reflect.TypeOf(tc.entity)
+			cache, ok := r.models.Load(typ)
 			assert.True(t, ok)
-			assert.Equal(t, testCase.wantModel, m)
+			assert.Equal(t, tc.wantModel, cache)
 		})
 	}
 }
 
-type customTableName struct {
-	Name string
+type CustomTableName struct {
+	FirstName string
 }
 
-func (c customTableName) TableName() string {
+func (c CustomTableName) TableName() string {
 	return "custom_table_name_t"
 }
 
-type customEmptyTableName struct {
-	Name string
+type CustomTableNamePtr struct {
+	FirstName string
 }
 
-func (c customEmptyTableName) TableName() string {
+func (c *CustomTableNamePtr) TableName() string {
+	return "custom_table_name_ptr_t"
+}
+
+type EmptyTableName struct {
+	FirstName string
+}
+
+func (c *EmptyTableName) TableName() string {
 	return ""
+}
+
+func TestModelWithTableName(t *testing.T) {
+	r := newRegistry()
+	m, err := r.Register(&TestModel{}, ModelWithTableName("test_model_ttt"))
+	require.NoError(t, err)
+	assert.Equal(t, "test_model_ttt", m.tableName)
+}
+
+func TestModelWithColumnName(t *testing.T) {
+	testCases := []struct {
+		name    string
+		field   string
+		colName string
+
+		wantColName string
+		wantErr     error
+	}{
+		{
+			name:        "column name",
+			field:       "FirstName",
+			colName:     "first_name_ccc",
+			wantColName: "first_name_ccc",
+		},
+		{
+			name:    "invalid column name",
+			field:   "XXX",
+			colName: "first_name_ccc",
+			wantErr: errs.NewErrUnknownField("XXX"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRegistry()
+			m, err := r.Register(&TestModel{}, ModelWithColumnName(tc.field, tc.colName))
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			fd, ok := m.fieldMap[tc.field]
+			require.True(t, ok)
+			assert.Equal(t, tc.wantColName, fd.colName)
+		})
+	}
 }

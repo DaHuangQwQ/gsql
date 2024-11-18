@@ -1,14 +1,27 @@
 package gsql
 
+import "database/sql"
+
 type DBOption func(db *DB)
 
 type DB struct {
-	r *registry
+	r  *registry
+	db *sql.DB
 }
 
-func NewDB(opts ...DBOption) (*DB, error) {
+func Open(driver string, dsn string, opts ...DBOption) (*DB, error) {
+	db, err := sql.Open(driver, dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	return OpenDB(db, opts...)
+}
+
+func OpenDB(db *sql.DB, opts ...DBOption) (*DB, error) {
 	res := &DB{
-		r: newRegistry(),
+		r:  newRegistry(),
+		db: db,
 	}
 
 	for _, opt := range opts {
@@ -18,8 +31,8 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	return res, nil
 }
 
-func MustNewDB(opts ...DBOption) *DB {
-	db, err := NewDB(opts...)
+func MustOpen(driver string, dsn string, opts ...DBOption) *DB {
+	db, err := Open(driver, dsn, opts...)
 	if err != nil {
 		panic(err)
 	}

@@ -21,11 +21,17 @@ type ModelOption func(m *model) error
 
 type model struct {
 	tableName string
-	fields    map[string]*field
+
+	// fieldMap 字段名到字段定义的映射
+	fieldMap map[string]*field
+	// columnMap 列名到字段定义的映射
+	columnMap map[string]*field
 }
 
 type field struct {
+	goName  string
 	colName string
+	typ     reflect.Type
 }
 
 // registry 元数据的注册中心
@@ -54,34 +60,6 @@ func (r *registry) Get(val any) (*model, error) {
 	return m.(*model), nil
 }
 
-// get RWMutex double check
-//func (r *registry) getV1(val any) (*model, error) {
-//	typ := reflect.TypeOf(val)
-//
-//	r.lock.RLock()
-//	m, ok := r.models[typ]
-//	r.lock.RUnlock()
-//	if ok {
-//		return m, nil
-//	}
-//
-//	r.lock.Lock()
-//	defer r.lock.Unlock()
-//	m, ok = r.models[typ]
-//	if ok {
-//		return m, nil
-//	}
-//
-//	var er error
-//	m, er = r.Register(val)
-//	if er != nil {
-//		return nil, er
-//	}
-//	r.models[typ] = m
-//
-//	return m, nil
-//}
-
 func (r *registry) Register(entity any, opts ...ModelOption) (*model, error) {
 	tye := reflect.TypeOf(entity)
 
@@ -96,6 +74,7 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*model, error) {
 	numFields := tye.NumField()
 
 	fieldMap := make(map[string]*field, numFields)
+	columnMap := make(map[string]*field, numFields)
 
 	for i := 0; i < numFields; i++ {
 		fd := tye.Field(i)
@@ -107,9 +86,15 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*model, error) {
 		if colName == "" {
 			colName = fd.Name
 		}
-		fieldMap[fd.Name] = &field{
+
+		fdMeta := &field{
+			goName:  fd.Name,
 			colName: underscoreName(colName),
+			typ:     fd.Type,
 		}
+
+		fieldMap[fd.Name] = fdMeta
+		columnMap[underscoreName(colName)] = fdMeta
 	}
 
 	tableName := ""
@@ -122,7 +107,8 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*model, error) {
 
 	res := &model{
 		tableName: tableName,
-		fields:    fieldMap,
+		fieldMap:  fieldMap,
+		columnMap: columnMap,
 	}
 
 	for _, opt := range opts {
@@ -164,7 +150,7 @@ func ModelWithTableName(tableName string) ModelOption {
 
 func ModelWithColumnName(fieldName string, colName string) ModelOption {
 	return func(m *model) error {
-		fd, ok := m.fields[fieldName]
+		fd, ok := m.fieldMap[fieldName]
 		if !ok {
 			return errs.NewErrUnknownField(fieldName)
 		}
