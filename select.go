@@ -3,13 +3,13 @@ package gsql
 import (
 	"context"
 	"github.com/DaHuangQwQ/gweb/internal/errs"
-	"reflect"
+	model2 "github.com/DaHuangQwQ/gweb/model"
 	"strings"
 )
 
 type Selector[T any] struct {
 	table string
-	model *model
+	model *model2.Model
 	where []Predicate
 	sb    strings.Builder
 	args  []any
@@ -41,48 +41,13 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 		return nil, errs.ErrNoRows
 	}
 
-	cs, err := row.Columns()
-	if err != nil {
-		return nil, err
-	}
-
 	tp := new(T)
 
-	vals := make([]any, 0, len(cs))
-	valElems := make([]reflect.Value, 0, len(cs))
+	val := s.db.creator(s.model, tp)
 
-	for _, c := range cs {
-		// c 是列名
-		fd, ok := s.model.columnMap[c]
-		if !ok {
-			return nil, errs.NewErrUnknownColumn(c)
-		}
+	err = val.SetColumns(row)
 
-		// 反射创建一个实例 这里创建的实例是原本类型的指针类型
-		val := reflect.New(fd.typ)
-		vals = append(vals, val.Interface())
-		valElems = append(valElems, val.Elem())
-	}
-
-	// 给 vals 里的赋值
-	// 类型要匹配 顺序要匹配
-	err = row.Scan(vals...)
-	if err != nil {
-		return nil, err
-	}
-
-	tpValueElem := reflect.ValueOf(tp).Elem()
-	for i, c := range cs {
-		// c 是列名
-		fd, ok := s.model.columnMap[c]
-		if !ok {
-			return nil, errs.NewErrUnknownColumn(c)
-		}
-		tpValueElem.FieldByName(fd.goName).
-			Set(valElems[i])
-	}
-
-	return tp, nil
+	return tp, err
 }
 
 func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
@@ -103,43 +68,11 @@ func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
 	for row.Next() {
 		tp := new(T)
 
-		cs, er := row.Columns()
-		if er != nil {
-			return nil, er
-		}
+		val := s.db.creator(s.model, tp)
 
-		vals := make([]any, 0, len(cs))
-		valElems := make([]reflect.Value, 0, len(cs))
-
-		for _, c := range cs {
-			// c 是列名
-			fd, ok := s.model.columnMap[c]
-			if !ok {
-				return nil, errs.NewErrUnknownColumn(c)
-			}
-
-			// 反射创建一个实例 这里创建的实例是原本类型的指针类型
-			val := reflect.New(fd.typ)
-			vals = append(vals, val.Interface())
-			valElems = append(valElems, val.Elem())
-		}
-
-		// 给 vals 里的赋值
-		// 类型要匹配 顺序要匹配
-		er = row.Scan(vals...)
-		if er != nil {
-			return nil, er
-		}
-
-		tpValueElem := reflect.ValueOf(tp).Elem()
-		for i, c := range cs {
-			// c 是列名
-			fd, ok := s.model.columnMap[c]
-			if !ok {
-				return nil, errs.NewErrUnknownColumn(c)
-			}
-			tpValueElem.FieldByName(fd.goName).
-				Set(valElems[i])
+		err = val.SetColumns(row)
+		if err != nil {
+			return nil, err
 		}
 
 		res = append(res, tp)
@@ -162,7 +95,7 @@ func (s *Selector[T]) Build() (*Query, error) {
 	s.sb.WriteString("SELECT * FROM ")
 
 	if s.table == "" {
-		s.From(s.model.tableName)
+		s.From(s.model.TableName)
 	}
 	s.sb.WriteString(s.table)
 
@@ -228,12 +161,12 @@ func (s *Selector[T]) buildExpression(expr Expression) error {
 		}
 		return nil
 	case Column:
-		fd, ok := s.model.fieldMap[exp.Name]
+		fd, ok := s.model.FieldMap[exp.Name]
 		if !ok {
 			return errs.NewErrUnknownField(exp.Name)
 		}
 		s.sb.WriteByte('`')
-		s.sb.WriteString(fd.colName)
+		s.sb.WriteString(fd.ColName)
 		s.sb.WriteByte('`')
 		return nil
 	case Value:

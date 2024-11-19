@@ -22,7 +22,3 @@ type Query struct {
 type QueryBuilder interface {
 	Build() (*Query, error)
 }
-
-type TableName interface {
-	TableName() string
-}

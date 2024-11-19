@@ -1,4 +1,4 @@
-package gsql
+package model
 
 import (
 	"github.com/DaHuangQwQ/gweb/internal/errs"
@@ -12,26 +12,20 @@ const (
 	tagKeyColumn = "column"
 )
 
-type Registry interface {
-	Get(val any) (*model, error)
-	Register(val any, opts ...ModelOption) (*model, error)
-}
+type Model struct {
+	TableName string
 
-type ModelOption func(m *model) error
-
-type model struct {
-	tableName string
-
-	// fieldMap 字段名到字段定义的映射
-	fieldMap map[string]*field
-	// columnMap 列名到字段定义的映射
-	columnMap map[string]*field
+	// FieldMap 字段名到字段定义的映射
+	FieldMap map[string]*field
+	// ColumnMap 列名到字段定义的映射
+	ColumnMap map[string]*field
 }
 
 type field struct {
-	goName  string
-	colName string
-	typ     reflect.Type
+	GoName  string
+	ColName string
+	Typ     reflect.Type
+	Offset  uintptr
 }
 
 // registry 元数据的注册中心
@@ -40,27 +34,27 @@ type registry struct {
 	//lock   sync.RWMutex
 }
 
-func newRegistry() *registry {
+func NewRegistry() *registry {
 	return &registry{
 		models: sync.Map{},
 	}
 }
 
-func (r *registry) Get(val any) (*model, error) {
+func (r *registry) Get(val any) (*Model, error) {
 	typ := reflect.TypeOf(val)
 	m, ok := r.models.Load(typ)
 	if ok {
-		return m.(*model), nil
+		return m.(*Model), nil
 	}
 	m, err := r.Register(val)
 	if err != nil {
 		return nil, err
 	}
 	r.models.Store(typ, m)
-	return m.(*model), nil
+	return m.(*Model), nil
 }
 
-func (r *registry) Register(entity any, opts ...ModelOption) (*model, error) {
+func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 	tye := reflect.TypeOf(entity)
 
 	for tye.Kind() == reflect.Pointer {
@@ -88,9 +82,10 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*model, error) {
 		}
 
 		fdMeta := &field{
-			goName:  fd.Name,
-			colName: underscoreName(colName),
-			typ:     fd.Type,
+			GoName:  fd.Name,
+			ColName: underscoreName(colName),
+			Typ:     fd.Type,
+			Offset:  fd.Offset,
 		}
 
 		fieldMap[fd.Name] = fdMeta
@@ -105,10 +100,10 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*model, error) {
 		tableName = underscoreName(tye.Name())
 	}
 
-	res := &model{
-		tableName: tableName,
-		fieldMap:  fieldMap,
-		columnMap: columnMap,
+	res := &Model{
+		TableName: tableName,
+		FieldMap:  fieldMap,
+		ColumnMap: columnMap,
 	}
 
 	for _, opt := range opts {
@@ -141,20 +136,20 @@ func (r *registry) parseTag(tag reflect.StructTag) (map[string]string, error) {
 	return res, nil
 }
 
-func ModelWithTableName(tableName string) ModelOption {
-	return func(m *model) error {
-		m.tableName = tableName
+func WithTableName(tableName string) ModelOption {
+	return func(m *Model) error {
+		m.TableName = tableName
 		return nil
 	}
 }
 
-func ModelWithColumnName(fieldName string, colName string) ModelOption {
-	return func(m *model) error {
-		fd, ok := m.fieldMap[fieldName]
+func WithColumnName(fieldName string, colName string) ModelOption {
+	return func(m *Model) error {
+		fd, ok := m.FieldMap[fieldName]
 		if !ok {
 			return errs.NewErrUnknownField(fieldName)
 		}
-		fd.colName = colName
+		fd.ColName = colName
 		return nil
 	}
 }
