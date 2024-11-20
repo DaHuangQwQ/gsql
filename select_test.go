@@ -6,10 +6,113 @@ import (
 	"errors"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/DaHuangQwQ/gweb/internal/errs"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
+
+func TestSelector_Select(t *testing.T) {
+	db := memoryDB(t)
+	testCases := []struct {
+		name      string
+		s         QueryBuilder
+		wantQuery *Query
+		wantErr   error
+	}{
+		{
+			name:    "invalid column",
+			s:       NewSelector[TestModel](db).Select(C("Invalid")),
+			wantErr: errs.NewErrUnknownField("Invalid"),
+		},
+		{
+			name: "multiple columns",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("LastName")),
+			wantQuery: &Query{
+				SQL: "SELECT `first_name`,`last_name` FROM `test_model`;",
+			},
+		},
+		{
+			name: "columns alias",
+			s:    NewSelector[TestModel](db).Select(C("FirstName").As("my_name"), C("LastName")),
+			wantQuery: &Query{
+				SQL: "SELECT `first_name` AS `my_name`,`last_name` FROM `test_model`;",
+			},
+		},
+		{
+			name: "avg",
+			s:    NewSelector[TestModel](db).Select(Avg("Age")),
+			wantQuery: &Query{
+				SQL: "SELECT AVG(`age`) FROM `test_model`;",
+			},
+		},
+		{
+			name: "avg alias",
+			s:    NewSelector[TestModel](db).Select(Avg("Age").As("avg_age")),
+			wantQuery: &Query{
+				SQL: "SELECT AVG(`age`) AS `avg_age` FROM `test_model`;",
+			},
+		},
+		{
+			name: "sum",
+			s:    NewSelector[TestModel](db).Select(Sum("Age")),
+			wantQuery: &Query{
+				SQL: "SELECT SUM(`age`) FROM `test_model`;",
+			},
+		},
+		{
+			name: "count",
+			s:    NewSelector[TestModel](db).Select(Count("Age")),
+			wantQuery: &Query{
+				SQL: "SELECT COUNT(`age`) FROM `test_model`;",
+			},
+		},
+		{
+			name: "max",
+			s:    NewSelector[TestModel](db).Select(Max("Age")),
+			wantQuery: &Query{
+				SQL: "SELECT MAX(`age`) FROM `test_model`;",
+			},
+		},
+		{
+			name: "min",
+			s:    NewSelector[TestModel](db).Select(Min("Age")),
+			wantQuery: &Query{
+				SQL: "SELECT MIN(`age`) FROM `test_model`;",
+			},
+		},
+		{
+			name:    "aggregate invalid columns",
+			s:       NewSelector[TestModel](db).Select(Min("Invalid")),
+			wantErr: errs.NewErrUnknownField("Invalid"),
+		},
+		{
+			name: "multiple aggregate",
+			s:    NewSelector[TestModel](db).Select(Min("Age"), Max("Age")),
+			wantQuery: &Query{
+				SQL: "SELECT MIN(`age`),MAX(`age`) FROM `test_model`;",
+			},
+		},
+		{
+			name: "raw expression",
+			s:    NewSelector[TestModel](db).Select(Raw("COUNT(DISTINCT `first_name`)")),
+			wantQuery: &Query{
+				SQL: "SELECT COUNT(DISTINCT `first_name`) FROM `test_model`;",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			q, err := tc.s.Build()
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.wantQuery, q)
+		})
+	}
+}
 
 func TestSelector_Build(t *testing.T) {
 	mockDB, _, err := sqlmock.New()
@@ -118,6 +221,30 @@ func TestSelector_Build(t *testing.T) {
 			name:     "unknown field",
 			selector: NewSelector[TestModel](db).Where(C("Age").Eq(18).Or(C("XX").Eq("dahuang"))),
 			wantErr:  errs.NewErrUnknownField("XX"),
+		},
+		{
+			name:     "raw expression as predicate",
+			selector: NewSelector[TestModel](db).Where(Raw("`id`<?", 18).AsPredicate()),
+			wantQuery: &Query{
+				SQL:  "SELECT * FROM `test_model` WHERE (`id`<?);",
+				Args: []any{18},
+			},
+		},
+		{
+			name:     "raw expression used in predicate",
+			selector: NewSelector[TestModel](db).Where(C("Id").Eq(Raw("`age`+?", 1))),
+			wantQuery: &Query{
+				SQL:  "SELECT * FROM `test_model` WHERE `id` = (`age`+?);",
+				Args: []any{1},
+			},
+		},
+		{
+			name:     "columns alias in where",
+			selector: NewSelector[TestModel](db).Where(C("Id").As("my_id").Eq(18)),
+			wantQuery: &Query{
+				SQL:  "SELECT * FROM `test_model` WHERE `id` = ?;",
+				Args: []any{18},
+			},
 		},
 	}
 
@@ -259,4 +386,12 @@ func TestSelector_GetMulti(t *testing.T) {
 			assert.Equal(t, testCase.wantRes, res)
 		})
 	}
+}
+
+func memoryDB(t *testing.T, opts ...DBOption) *DB {
+	db, err := Open("sqlite3",
+		"file:test.db?cache=shared&mode=memory",
+		opts...)
+	require.NoError(t, err)
+	return db
 }

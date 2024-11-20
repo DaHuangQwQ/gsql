@@ -45,8 +45,14 @@ func MustOpen(driver string, dsn string, opts ...DBOption) *DB {
 	return db
 }
 
-func WithReflectValuer(v valuer.Creator) DBOption {
+func WithValuer(v valuer.Creator) DBOption {
 	return func(db *DB) {
 		db.creator = v
+	}
+}
+
+func WithRegistry(r model.Registry) DBOption {
+	return func(db *DB) {
+		db.r = r
 	}
 }

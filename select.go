@@ -7,12 +7,17 @@ import (
 	"strings"
 )
 
+type Selectable interface {
+	selectable()
+}
+
 type Selector[T any] struct {
-	table string
-	model *model2.Model
-	where []Predicate
-	sb    strings.Builder
-	args  []any
+	table   string
+	model   *model2.Model
+	columns []Selectable
+	where   []Predicate
+	sb      strings.Builder
+	args    []any
 
 	db *DB
 }
@@ -92,7 +97,13 @@ func (s *Selector[T]) Build() (*Query, error) {
 		return nil, err
 	}
 
-	s.sb.WriteString("SELECT * FROM ")
+	s.sb.WriteString("SELECT ")
+
+	if err = s.buildColumns(); err != nil {
+		return nil, err
+	}
+
+	s.sb.WriteString(" FROM ")
 
 	if s.table == "" {
 		s.From(s.model.TableName)
@@ -121,11 +132,14 @@ func (s *Selector[T]) Build() (*Query, error) {
 	}, nil
 }
 
-func (s *Selector[T]) addArgs(val any) {
+func (s *Selector[T]) addArgs(vals ...any) {
+	if len(vals) == 0 {
+		return
+	}
 	if s.args == nil {
 		s.args = make([]any, 0, 4)
 	}
-	s.args = append(s.args, val)
+	s.args = append(s.args, vals...)
 }
 
 func (s *Selector[T]) buildExpression(expr Expression) error {
@@ -144,9 +158,12 @@ func (s *Selector[T]) buildExpression(expr Expression) error {
 		if ok {
 			s.sb.WriteByte(')')
 		}
-		s.sb.WriteByte(' ')
-		s.sb.WriteString(exp.op.String())
-		s.sb.WriteByte(' ')
+
+		if exp.op != "" {
+			s.sb.WriteByte(' ')
+			s.sb.WriteString(exp.op.String())
+			s.sb.WriteByte(' ')
+		}
 
 		_, ok = exp.right.(Predicate)
 		if ok {
@@ -161,21 +178,80 @@ func (s *Selector[T]) buildExpression(expr Expression) error {
 		}
 		return nil
 	case Column:
-		fd, ok := s.model.FieldMap[exp.Name]
-		if !ok {
-			return errs.NewErrUnknownField(exp.Name)
-		}
-		s.sb.WriteByte('`')
-		s.sb.WriteString(fd.ColName)
-		s.sb.WriteByte('`')
-		return nil
+		exp.alias = ""
+		return s.buildColumn(exp)
 	case Value:
 		s.sb.WriteByte('?')
 		s.addArgs(exp.val)
 		return nil
+	case RawExpr:
+		s.sb.WriteByte('(')
+		s.sb.WriteString(exp.raw)
+		s.addArgs(exp.args...)
+		s.sb.WriteByte(')')
+		return nil
 	default:
 		return errs.ErrInvalidExpression
 	}
+}
+
+func (s *Selector[T]) buildColumns() error {
+	if len(s.columns) == 0 {
+		s.sb.WriteByte('*')
+		return nil
+	}
+
+	for i, col := range s.columns {
+		if i > 0 {
+			s.sb.WriteByte(',')
+		}
+		switch c := col.(type) {
+		case Column:
+			er := s.buildColumn(c)
+			if er != nil {
+				return er
+			}
+		case Aggregate:
+			s.sb.WriteString(c.fn)
+			s.sb.WriteByte('(')
+			er := s.buildColumn(Column{
+				Name: c.arg,
+			})
+			s.sb.WriteByte(')')
+			if er != nil {
+				return er
+			}
+			// 聚合函数的别名
+			if c.alias != "" {
+				s.sb.WriteString(" AS ")
+				s.sb.WriteByte('`')
+				s.sb.WriteString(c.alias)
+				s.sb.WriteByte('`')
+			}
+		case RawExpr:
+			s.sb.WriteString(c.raw)
+			s.addArgs(c.args...)
+		}
+	}
+
+	return nil
+}
+
+func (s *Selector[T]) buildColumn(col Column) error {
+	fd, ok := s.model.FieldMap[col.Name]
+	if !ok {
+		return errs.NewErrUnknownField(col.Name)
+	}
+	s.sb.WriteByte('`')
+	s.sb.WriteString(fd.ColName)
+	s.sb.WriteByte('`')
+	if col.alias != "" {
+		s.sb.WriteString(" AS ")
+		s.sb.WriteByte('`')
+		s.sb.WriteString(col.alias)
+		s.sb.WriteByte('`')
+	}
+	return nil
 }
 
 func (s *Selector[T]) From(table string) *Selector[T] {
@@ -194,6 +270,11 @@ func (s *Selector[T]) From(table string) *Selector[T] {
 		}
 	}
 	s.table = str
+	return s
+}
+
+func (s *Selector[T]) Select(cols ...Selectable) *Selector[T] {
+	s.columns = cols
 	return s
 }
 

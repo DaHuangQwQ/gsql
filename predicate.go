@@ -26,26 +26,6 @@ type Predicate struct {
 	op    op
 }
 
-type Column struct {
-	Name string
-}
-
-func C(name string) Column {
-	return Column{Name: name}
-}
-
-func (c Column) Eq(arg any) Predicate {
-	return Predicate{
-		left: c,
-		op:   opEQ,
-		right: Value{
-			val: arg,
-		},
-	}
-}
-
-func (c Column) expr() {}
-
 func Not(p Predicate) Predicate {
 	return Predicate{
 		op:    opNOT,
@@ -76,8 +56,3 @@ type Value struct {
 }
 
 func (Value) expr() {}
-
-// Expression 标记接口， 代表表达式
-type Expression interface {
-	expr()
-}
