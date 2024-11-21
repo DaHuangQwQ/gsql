@@ -1,9 +1,14 @@
 package gsql
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/DaHuangQwQ/gweb/internal/errs"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -182,6 +187,58 @@ func TestInserter_Build(t *testing.T) {
 				return
 			}
 			assert.Equal(t, testCase.wantRes, q)
+		})
+	}
+}
+
+func TestInserter_Exec(t *testing.T) {
+	mockDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	db, err := OpenDB(mockDB)
+	require.NoError(t, err)
+	testCases := []struct {
+		name     string
+		i        *Inserter[TestModel]
+		wantErr  error
+		affected int64
+	}{
+		{
+			name: "query error",
+			i: func() *Inserter[TestModel] {
+				return NewInserter[TestModel](db).Values(&TestModel{}).
+					Columns("Invalid")
+			}(),
+			wantErr: errs.NewErrUnknownField("Invalid"),
+		},
+		{
+			name: "db error",
+			i: func() *Inserter[TestModel] {
+				mock.ExpectExec("INSERT INTO .*").
+					WillReturnError(errors.New("db error"))
+				return NewInserter[TestModel](db).Values(&TestModel{})
+			}(),
+			wantErr: errors.New("db error"),
+		},
+		{
+			name: "exec",
+			i: func() *Inserter[TestModel] {
+				res := driver.RowsAffected(1)
+				mock.ExpectExec("INSERT INTO .*").
+					WillReturnResult(res)
+				return NewInserter[TestModel](db).Values(&TestModel{})
+			}(),
+			affected: 1,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := tc.i.Exec(context.Background())
+			affected, err := res.RowsAffected()
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.affected, affected)
 		})
 	}
 }

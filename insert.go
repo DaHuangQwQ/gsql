@@ -1,6 +1,7 @@
 package gsql
 
 import (
+	"context"
 	"github.com/DaHuangQwQ/gweb/internal/errs"
 	"github.com/DaHuangQwQ/gweb/model"
 	"strings"
@@ -142,6 +143,22 @@ func (i *Inserter[T]) Build() (*Query, error) {
 		SQL:  i.sb.String(),
 		Args: i.args,
 	}, nil
+}
+
+func (i *Inserter[T]) Exec(ctx context.Context) Result {
+	q, err := i.Build()
+	if err != nil {
+		return Result{
+			err: err,
+		}
+	}
+
+	res, err := i.db.db.Exec(q.SQL, q.Args...)
+
+	return Result{
+		err: err,
+		res: res,
+	}
 }
 
 func (i *Inserter[T]) OnDuplicateKey() *UpsertBuilder[T] {
