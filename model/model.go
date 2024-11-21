@@ -15,13 +15,14 @@ const (
 type Model struct {
 	TableName string
 
+	Fields []*Field
 	// FieldMap 字段名到字段定义的映射
-	FieldMap map[string]*field
+	FieldMap map[string]*Field
 	// ColumnMap 列名到字段定义的映射
-	ColumnMap map[string]*field
+	ColumnMap map[string]*Field
 }
 
-type field struct {
+type Field struct {
 	GoName  string
 	ColName string
 	Typ     reflect.Type
@@ -67,8 +68,9 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 
 	numFields := tye.NumField()
 
-	fieldMap := make(map[string]*field, numFields)
-	columnMap := make(map[string]*field, numFields)
+	fieldMap := make(map[string]*Field, numFields)
+	columnMap := make(map[string]*Field, numFields)
+	fields := make([]*Field, 0, numFields)
 
 	for i := 0; i < numFields; i++ {
 		fd := tye.Field(i)
@@ -81,7 +83,7 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 			colName = fd.Name
 		}
 
-		fdMeta := &field{
+		fdMeta := &Field{
 			GoName:  fd.Name,
 			ColName: underscoreName(colName),
 			Typ:     fd.Type,
@@ -90,6 +92,7 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 
 		fieldMap[fd.Name] = fdMeta
 		columnMap[underscoreName(colName)] = fdMeta
+		fields = append(fields, fdMeta)
 	}
 
 	tableName := ""
@@ -102,6 +105,7 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 
 	res := &Model{
 		TableName: tableName,
+		Fields:    fields,
 		FieldMap:  fieldMap,
 		ColumnMap: columnMap,
 	}

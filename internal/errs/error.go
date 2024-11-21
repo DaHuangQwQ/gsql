@@ -13,6 +13,8 @@ var (
 	ErrInvalidExpression = errors.New("invalid expression")
 
 	ErrNoRows = errors.New("no rows in result set")
+
+	ErrInsertZeroRow = errors.New("no values to insert")
 )
 
 func NewErrUnknownField(name any) error {
@@ -25,4 +27,16 @@ func NewErrUnknownColumn(name any) error {
 
 func NewErrInvalidTagContent(name any) error {
 	return fmt.Errorf("gsql: invalid tag content: %v", name)
+}
+
+func NewErrUnsupportedExpression(expr any) error {
+	return fmt.Errorf("gsql: unsupported expression: %v", expr)
+}
+
+func NewErrUnsupportedTable(table any) error {
+	return fmt.Errorf("gsql: unsupported table: %v", table)
+}
+
+func NewErrUnsupportedAssignable(assign any) error {
+	return fmt.Errorf("gsql: unsupported assignable: %v", assign)
 }

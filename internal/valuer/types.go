@@ -7,6 +7,7 @@ import (
 
 type Valuer interface {
 	SetColumns(rows *sql.Rows) error
+	Field(name string) (any, error)
 }
 
 type Creator func(model *gsql.Model, entity any) Valuer

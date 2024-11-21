@@ -36,3 +36,5 @@ func valueOf(arg any) Expression {
 func (c Column) expr() {}
 
 func (c Column) selectable() {}
+
+func (c Column) assign() {}

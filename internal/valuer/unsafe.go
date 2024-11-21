@@ -47,3 +47,15 @@ func (r unsafeValuer) SetColumns(rows *sql.Rows) error {
 
 	return rows.Scan(vals...)
 }
+
+// Field 反射在特定的地址上，创建一个特定类型的实例
+func (r unsafeValuer) Field(name string) (any, error) {
+	fd, ok := r.model.FieldMap[name]
+	if !ok {
+		return nil, errs.NewErrUnknownField(name)
+	}
+	fdAddress := unsafe.Pointer(uintptr(r.address) + fd.Offset)
+
+	val := reflect.NewAt(fd.Typ, fdAddress)
+	return val.Elem().Interface(), nil
+}

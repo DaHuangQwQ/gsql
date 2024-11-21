@@ -3,7 +3,6 @@ package gsql
 import (
 	"context"
 	"github.com/DaHuangQwQ/gweb/internal/errs"
-	model2 "github.com/DaHuangQwQ/gweb/model"
 	"strings"
 )
 
@@ -12,19 +11,31 @@ type Selectable interface {
 }
 
 type Selector[T any] struct {
+	builder
 	table   string
-	model   *model2.Model
 	columns []Selectable
 	where   []Predicate
-	sb      strings.Builder
-	args    []any
 
 	db *DB
 }
 
 func NewSelector[T any](db *DB) *Selector[T] {
+	m, err := db.r.Register(new(T))
+	if err != nil {
+		panic(err)
+	}
+
 	return &Selector[T]{
-		sb: strings.Builder{},
+		builder: builder{
+			core: core{
+				model:   m,
+				dialect: db.dialect,
+				creator: db.creator,
+				r:       db.r,
+			},
+			sb:     strings.Builder{},
+			quoter: db.dialect.quoter(),
+		},
 		db: db,
 	}
 }
@@ -91,15 +102,9 @@ func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
 }
 
 func (s *Selector[T]) Build() (*Query, error) {
-	var err error
-	s.model, err = s.db.r.Register(new(T))
-	if err != nil {
-		return nil, err
-	}
-
 	s.sb.WriteString("SELECT ")
 
-	if err = s.buildColumns(); err != nil {
+	if err := s.buildColumns(); err != nil {
 		return nil, err
 	}
 
@@ -132,69 +137,6 @@ func (s *Selector[T]) Build() (*Query, error) {
 	}, nil
 }
 
-func (s *Selector[T]) addArgs(vals ...any) {
-	if len(vals) == 0 {
-		return
-	}
-	if s.args == nil {
-		s.args = make([]any, 0, 4)
-	}
-	s.args = append(s.args, vals...)
-}
-
-func (s *Selector[T]) buildExpression(expr Expression) error {
-	switch exp := expr.(type) {
-	case nil:
-		return nil
-	case Predicate:
-		_, ok := exp.left.(Predicate)
-		if ok {
-			s.sb.WriteByte('(')
-		}
-		err := s.buildExpression(exp.left)
-		if err != nil {
-			return err
-		}
-		if ok {
-			s.sb.WriteByte(')')
-		}
-
-		if exp.op != "" {
-			s.sb.WriteByte(' ')
-			s.sb.WriteString(exp.op.String())
-			s.sb.WriteByte(' ')
-		}
-
-		_, ok = exp.right.(Predicate)
-		if ok {
-			s.sb.WriteByte('(')
-		}
-		err = s.buildExpression(exp.right)
-		if err != nil {
-			return err
-		}
-		if ok {
-			s.sb.WriteByte(')')
-		}
-		return nil
-	case Column:
-		exp.alias = ""
-		return s.buildColumn(exp)
-	case Value:
-		s.sb.WriteByte('?')
-		s.addArgs(exp.val)
-		return nil
-	case RawExpr:
-		s.sb.WriteByte('(')
-		s.sb.WriteString(exp.raw)
-		s.addArgs(exp.args...)
-		s.sb.WriteByte(')')
-		return nil
-	default:
-		return errs.ErrInvalidExpression
-	}
-}
-
 func (s *Selector[T]) buildColumns() error {
 	if len(s.columns) == 0 {
 		s.sb.WriteByte('*')
@@ -224,9 +166,7 @@ func (s *Selector[T]) buildColumns() error {
 			// 聚合函数的别名
 			if c.alias != "" {
 				s.sb.WriteString(" AS ")
-				s.sb.WriteByte('`')
-				s.sb.WriteString(c.alias)
-				s.sb.WriteByte('`')
+				s.quote(c.alias)
 			}
 		case RawExpr:
 			s.sb.WriteString(c.raw)
@@ -234,23 +174,6 @@ func (s *Selector[T]) buildColumns() error {
 		}
 	}
 
-	return nil
-}
-
-func (s *Selector[T]) buildColumn(col Column) error {
-	fd, ok := s.model.FieldMap[col.Name]
-	if !ok {
-		return errs.NewErrUnknownField(col.Name)
-	}
-	s.sb.WriteByte('`')
-	s.sb.WriteString(fd.ColName)
-	s.sb.WriteByte('`')
-	if col.alias != "" {
-		s.sb.WriteString(" AS ")
-		s.sb.WriteByte('`')
-		s.sb.WriteString(col.alias)
-		s.sb.WriteByte('`')
-	}
 	return nil
 }
 

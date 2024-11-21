@@ -59,3 +59,9 @@ func (r reflectValuer) SetColumns(rows *sql.Rows) error {
 
 	return nil
 }
+
+func (r reflectValuer) Field(name string) (any, error) {
+	val := r.val.FieldByName(name)
+
+	return val.Interface(), nil
+}
