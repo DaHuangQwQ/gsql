@@ -40,3 +40,7 @@ func NewErrUnsupportedTable(table any) error {
 func NewErrUnsupportedAssignable(assign any) error {
 	return fmt.Errorf("gsql: unsupported assignable: %v", assign)
 }
+
+func NewErrFailedToRollbackTx(bizErr error, rbErr error, panicked bool) error {
+	return fmt.Errorf("gsql: failed to rollback transaction bizErr:%w, rbErr:%s , isPanic:%t ", bizErr, rbErr, panicked)
+}
