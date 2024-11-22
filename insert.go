@@ -34,14 +34,14 @@ type Inserter[T any] struct {
 	builder
 	values  []*T
 	columns []string
-	model   *model.Model
 
-	db             *DB
+	session        Session
 	onDuplicateKey *Upsert
 }
 
-func NewInserter[T any](db *DB) *Inserter[T] {
-	m, err := db.r.Register(new(T))
+func NewInserter[T any](db Session) *Inserter[T] {
+	base := db.getCore()
+	m, err := base.r.Register(new(T))
 	if err != nil {
 		panic(err)
 	}
@@ -50,15 +50,15 @@ func NewInserter[T any](db *DB) *Inserter[T] {
 		builder: builder{
 			core: core{
 				model:   m,
-				dialect: db.dialect,
-				creator: db.creator,
-				r:       db.r,
+				dialect: base.dialect,
+				creator: base.creator,
+				r:       base.r,
 			},
 			sb:     strings.Builder{},
-			quoter: db.dialect.quoter(),
+			quoter: base.dialect.quoter(),
 		},
-		db:     db,
-		values: []*T{},
+		session: db,
+		values:  []*T{},
 	}
 }
 
@@ -67,24 +67,16 @@ func (i *Inserter[T]) Build() (*Query, error) {
 		return nil, errs.ErrInsertZeroRow
 	}
 
-	if i.model == nil {
-		m, err := i.db.r.Get(i.values[0])
-		if err != nil {
-			return nil, err
-		}
-		i.model = m
-	}
-
 	i.sb.WriteString("INSERT INTO ")
 
-	i.quote(i.model.TableName)
+	i.quote(i.core.model.TableName)
 
-	fields := i.model.Fields
+	fields := i.core.model.Fields
 
 	if len(i.columns) > 0 {
 		fields = make([]*model.Field, 0, len(i.columns))
 		for _, col := range i.columns {
-			val, ok := i.model.FieldMap[col]
+			val, ok := i.core.model.FieldMap[col]
 			if !ok {
 				return nil, errs.NewErrUnknownField(col)
 			}
@@ -153,7 +145,7 @@ func (i *Inserter[T]) Exec(ctx context.Context) Result {
 		}
 	}
 
-	res, err := i.db.db.Exec(q.SQL, q.Args...)
+	res, err := i.session.execContext(ctx, q.SQL, q.Args...)
 
 	return Result{
 		err: err,

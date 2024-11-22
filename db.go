@@ -1,6 +1,7 @@
 package gsql
 
 import (
+	"context"
 	"database/sql"
 	"github.com/DaHuangQwQ/gweb/internal/valuer"
 	"github.com/DaHuangQwQ/gweb/model"
@@ -9,10 +10,30 @@ import (
 type DBOption func(db *DB)
 
 type DB struct {
-	r       model.Registry
-	db      *sql.DB
-	creator valuer.Creator
-	dialect Dialect
+	core
+	db *sql.DB
+}
+
+func (db *DB) getCore() core {
+	return db.core
+}
+
+func (db *DB) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return db.db.QueryContext(ctx, query, args...)
+}
+
+func (db *DB) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return db.db.ExecContext(ctx, query, args...)
+}
+
+func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+	tx, err := db.db.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &Tx{
+		tx: tx,
+	}, nil
 }
 
 func Open(driver string, dsn string, opts ...DBOption) (*DB, error) {
@@ -26,10 +47,12 @@ func Open(driver string, dsn string, opts ...DBOption) (*DB, error) {
 
 func OpenDB(db *sql.DB, opts ...DBOption) (*DB, error) {
 	res := &DB{
-		r:       model.NewRegistry(),
-		db:      db,
-		creator: valuer.NewUnsafeValue,
-		dialect: DialectMySQL,
+		core: core{
+			r:       model.NewRegistry(),
+			creator: valuer.NewUnsafeValue,
+			dialect: DialectMySQL,
+		},
+		db: db,
 	}
 
 	for _, opt := range opts {

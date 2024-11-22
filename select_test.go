@@ -154,7 +154,7 @@ func TestSelector_Build(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:     "from db",
+			name:     "from session",
 			selector: NewSelector[TestModel](db).From("test_db.test_model"),
 			wantQuery: &Query{
 				SQL:  "SELECT * FROM `test_db`.`test_model`;",
@@ -323,7 +323,7 @@ func TestSelector_Get(t *testing.T) {
 		},
 		//{
 		//	name:    "get row: bad type",
-		//	s:       NewSelector[TestModel](db).Where(C("Id").Eq(18)),
+		//	s:       NewSelector[TestModel](session).Where(C("Id").Eq(18)),
 		//	wantErr: errs.NewErrUnknownColumn("id"),
 		//},
 	}
@@ -390,7 +390,7 @@ func TestSelector_GetMulti(t *testing.T) {
 
 func memoryDB(t *testing.T, opts ...DBOption) *DB {
 	db, err := Open("sqlite3",
-		"file:test.db?cache=shared&mode=memory",
+		"file:test.session?cache=shared&mode=memory",
 		opts...)
 	require.NoError(t, err)
 	return db

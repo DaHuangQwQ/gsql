@@ -16,11 +16,12 @@ type Selector[T any] struct {
 	columns []Selectable
 	where   []Predicate
 
-	db *DB
+	session Session
 }
 
-func NewSelector[T any](db *DB) *Selector[T] {
-	m, err := db.r.Register(new(T))
+func NewSelector[T any](db Session) *Selector[T] {
+	base := db.getCore()
+	m, err := base.r.Register(new(T))
 	if err != nil {
 		panic(err)
 	}
@@ -29,14 +30,14 @@ func NewSelector[T any](db *DB) *Selector[T] {
 		builder: builder{
 			core: core{
 				model:   m,
-				dialect: db.dialect,
-				creator: db.creator,
-				r:       db.r,
+				dialect: base.dialect,
+				creator: base.creator,
+				r:       base.r,
 			},
 			sb:     strings.Builder{},
-			quoter: db.dialect.quoter(),
+			quoter: base.dialect.quoter(),
 		},
-		db: db,
+		session: db,
 	}
 }
 
@@ -46,9 +47,9 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 		return nil, err
 	}
 
-	db := s.db.db
+	db := s.session
 
-	row, err := db.QueryContext(ctx, q.SQL, q.Args...)
+	row, err := db.queryContext(ctx, q.SQL, q.Args...)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +60,7 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 
 	tp := new(T)
 
-	val := s.db.creator(s.model, tp)
+	val := s.builder.core.creator(s.model, tp)
 
 	err = val.SetColumns(row)
 
@@ -72,9 +73,7 @@ func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
 		return nil, err
 	}
 
-	db := s.db.db
-
-	row, err := db.QueryContext(ctx, q.SQL, q.Args...)
+	row, err := s.session.queryContext(ctx, q.SQL, q.Args...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +83,7 @@ func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
 	for row.Next() {
 		tp := new(T)
 
-		val := s.db.creator(s.model, tp)
+		val := s.builder.core.creator(s.model, tp)
 
 		err = val.SetColumns(row)
 		if err != nil {

@@ -211,13 +211,13 @@ func TestInserter_Exec(t *testing.T) {
 			wantErr: errs.NewErrUnknownField("Invalid"),
 		},
 		{
-			name: "db error",
+			name: "session error",
 			i: func() *Inserter[TestModel] {
 				mock.ExpectExec("INSERT INTO .*").
-					WillReturnError(errors.New("db error"))
+					WillReturnError(errors.New("session error"))
 				return NewInserter[TestModel](db).Values(&TestModel{})
 			}(),
-			wantErr: errors.New("db error"),
+			wantErr: errors.New("session error"),
 		},
 		{
 			name: "exec",
