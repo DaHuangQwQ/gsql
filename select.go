@@ -2,9 +2,11 @@ package gsql
 
 import (
 	"context"
-	"github.com/DaHuangQwQ/gweb/internal/errs"
+	"github.com/DaHuangQwQ/gsql/internal/errs"
 	"strings"
 )
+
+var _ Handler = (&Selector[any]{}).getHandler
 
 type Selectable interface {
 	selectable()
@@ -33,6 +35,7 @@ func NewSelector[T any](db Session) *Selector[T] {
 				dialect: base.dialect,
 				creator: base.creator,
 				r:       base.r,
+				mdls:    base.mdls,
 			},
 			sb:     strings.Builder{},
 			quoter: base.dialect.quoter(),
@@ -42,20 +45,45 @@ func NewSelector[T any](db Session) *Selector[T] {
 }
 
 func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
+	root := s.getHandler
+
+	for i := len(s.session.getCore().mdls) - 1; i >= 0; i-- {
+		root = s.core.mdls[i](root)
+	}
+
+	res := root(ctx, &QueryContext{
+		Type:    TypeSelect,
+		Builder: s,
+	})
+
+	if res.Result != nil {
+		return res.Result.(*T), nil
+	}
+
+	return nil, res.Err
+}
+
+func (s *Selector[T]) getHandler(ctx context.Context, queryContext *QueryContext) *QueryResult {
 	q, err := s.Build()
 	if err != nil {
-		return nil, err
+		return &QueryResult{
+			Err: err,
+		}
 	}
 
 	db := s.session
 
 	row, err := db.queryContext(ctx, q.SQL, q.Args...)
 	if err != nil {
-		return nil, err
+		return &QueryResult{
+			Err: err,
+		}
 	}
 
 	if !row.Next() {
-		return nil, errs.ErrNoRows
+		return &QueryResult{
+			Err: errs.ErrNoRows,
+		}
 	}
 
 	tp := new(T)
@@ -64,7 +92,10 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 
 	err = val.SetColumns(row)
 
-	return tp, err
+	return &QueryResult{
+		Result: tp,
+		Err:    err,
+	}
 }
 
 func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {

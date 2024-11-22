@@ -2,8 +2,8 @@ package gsql
 
 import (
 	"context"
-	"github.com/DaHuangQwQ/gweb/internal/errs"
-	"github.com/DaHuangQwQ/gweb/model"
+	"github.com/DaHuangQwQ/gsql/internal/errs"
+	"github.com/DaHuangQwQ/gsql/model"
 	"strings"
 )
 
@@ -24,6 +24,8 @@ func (o *UpsertBuilder[T]) Update(assigns ...Assignable) *Inserter[T] {
 	}
 	return o.i
 }
+
+var _ Handler = (&Inserter[any]{}).execHandler
 
 type Upsert struct {
 	assigns         []Assignable
@@ -53,6 +55,7 @@ func NewInserter[T any](db Session) *Inserter[T] {
 				dialect: base.dialect,
 				creator: base.creator,
 				r:       base.r,
+				mdls:    base.mdls,
 			},
 			sb:     strings.Builder{},
 			quoter: base.dialect.quoter(),
@@ -138,18 +141,45 @@ func (i *Inserter[T]) Build() (*Query, error) {
 }
 
 func (i *Inserter[T]) Exec(ctx context.Context) Result {
+	root := i.execHandler
+
+	for idx := len(i.session.getCore().mdls) - 1; idx >= 0; idx-- {
+		root = i.core.mdls[idx](root)
+	}
+
+	res := root(ctx, &QueryContext{
+		Type:    TypeInsert,
+		Builder: i,
+	})
+
+	if res.Result != nil {
+		return Result{
+			res: res.Result.(Result),
+		}
+	}
+
+	return Result{
+		err: res.Err,
+	}
+}
+
+func (i *Inserter[T]) execHandler(ctx context.Context, queryContext *QueryContext) *QueryResult {
 	q, err := i.Build()
 	if err != nil {
-		return Result{
-			err: err,
+		return &QueryResult{
+			Result: Result{
+				err: err,
+			},
 		}
 	}
 
 	res, err := i.session.execContext(ctx, q.SQL, q.Args...)
 
-	return Result{
-		err: err,
-		res: res,
+	return &QueryResult{
+		Result: Result{
+			res: res,
+			err: err,
+		},
 	}
 }
 

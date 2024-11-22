@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/DaHuangQwQ/gweb/internal/errs"
+	"github.com/DaHuangQwQ/gsql/internal/errs"
 )
 
 var (

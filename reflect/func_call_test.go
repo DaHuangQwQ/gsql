@@ -1,7 +1,7 @@
 package reflect
 
 import (
-	"github.com/DaHuangQwQ/gweb/reflect/types"
+	"github.com/DaHuangQwQ/gsql/reflect/types"
 	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"

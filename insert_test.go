@@ -6,7 +6,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/DaHuangQwQ/gweb/internal/errs"
+	"github.com/DaHuangQwQ/gsql/internal/errs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"

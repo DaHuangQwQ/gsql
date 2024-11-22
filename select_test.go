@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/DaHuangQwQ/gweb/internal/errs"
+	"github.com/DaHuangQwQ/gsql/internal/errs"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

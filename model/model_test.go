@@ -2,7 +2,7 @@ package model
 
 import (
 	"database/sql"
-	"github.com/DaHuangQwQ/gweb/internal/errs"
+	"github.com/DaHuangQwQ/gsql/internal/errs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reflect"

@@ -2,8 +2,8 @@ package valuer
 
 import (
 	"database/sql"
-	"github.com/DaHuangQwQ/gweb/internal/errs"
-	gsql "github.com/DaHuangQwQ/gweb/model"
+	"github.com/DaHuangQwQ/gsql/internal/errs"
+	gsql "github.com/DaHuangQwQ/gsql/model"
 	"reflect"
 )
 

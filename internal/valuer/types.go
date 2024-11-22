@@ -2,7 +2,7 @@ package valuer
 
 import (
 	"database/sql"
-	gsql "github.com/DaHuangQwQ/gweb/model"
+	gsql "github.com/DaHuangQwQ/gsql/model"
 )
 
 type Valuer interface {

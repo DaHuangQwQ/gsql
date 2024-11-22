@@ -3,7 +3,7 @@ package valuer
 import (
 	"database/sql/driver"
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/DaHuangQwQ/gweb/model"
+	"github.com/DaHuangQwQ/gsql/model"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

@@ -3,8 +3,8 @@ package gsql
 import (
 	"context"
 	"database/sql"
-	"github.com/DaHuangQwQ/gweb/internal/valuer"
-	"github.com/DaHuangQwQ/gweb/model"
+	"github.com/DaHuangQwQ/gsql/internal/valuer"
+	"github.com/DaHuangQwQ/gsql/model"
 )
 
 type DBOption func(db *DB)
@@ -12,6 +12,10 @@ type DBOption func(db *DB)
 type DB struct {
 	core
 	db *sql.DB
+}
+
+func (db *DB) Use(mdls ...Middleware) {
+	db.core.mdls = append(db.core.mdls, mdls...)
 }
 
 func (db *DB) getCore() core {

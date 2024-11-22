@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/DaHuangQwQ/gweb/internal/errs"
+	"github.com/DaHuangQwQ/gsql/internal/errs"
 	"reflect"
 	"regexp"
 	"strings"
