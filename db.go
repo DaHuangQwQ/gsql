@@ -3,8 +3,11 @@ package gsql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"github.com/DaHuangQwQ/gsql/internal/valuer"
 	"github.com/DaHuangQwQ/gsql/model"
+	"log"
 )
 
 type DBOption func(db *DB)
@@ -38,6 +41,15 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	return &Tx{
 		tx: tx,
 	}, nil
+}
+
+func (db *DB) Wait() error {
+	err := db.db.Ping()
+	for errors.Is(err, driver.ErrBadConn) {
+		log.Println("gsql: err bad connection")
+		err = db.db.Ping()
+	}
+	return nil
 }
 
 func Open(driver string, dsn string, opts ...DBOption) (*DB, error) {
