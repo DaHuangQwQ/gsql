@@ -16,6 +16,7 @@ const (
 	TypeInsert Type = "insert"
 	TypeUpdate Type = "update"
 	TypeDelete Type = "delete"
+	TypeRaw    Type = "raw"
 )
 
 type QueryContext struct {

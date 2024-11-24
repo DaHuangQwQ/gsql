@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-var _ Handler = (&Selector[any]{}).getHandler
-
 type Selectable interface {
 	selectable()
 }
@@ -45,15 +43,10 @@ func NewSelector[T any](db Session) *Selector[T] {
 }
 
 func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
-	root := s.getHandler
-
-	for i := len(s.session.getCore().mdls) - 1; i >= 0; i-- {
-		root = s.core.mdls[i](root)
-	}
-
-	res := root(ctx, &QueryContext{
+	res := get[T](ctx, s.session, s.core, &QueryContext{
 		Type:    TypeSelect,
 		Builder: s,
+		Model:   s.model,
 	})
 
 	if res.Result != nil {
@@ -61,41 +54,6 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 	}
 
 	return nil, res.Err
-}
-
-func (s *Selector[T]) getHandler(ctx context.Context, queryContext *QueryContext) *QueryResult {
-	q, err := s.Build()
-	if err != nil {
-		return &QueryResult{
-			Err: err,
-		}
-	}
-
-	db := s.session
-
-	row, err := db.queryContext(ctx, q.SQL, q.Args...)
-	if err != nil {
-		return &QueryResult{
-			Err: err,
-		}
-	}
-
-	if !row.Next() {
-		return &QueryResult{
-			Err: errs.ErrNoRows,
-		}
-	}
-
-	tp := new(T)
-
-	val := s.builder.core.creator(s.model, tp)
-
-	err = val.SetColumns(row)
-
-	return &QueryResult{
-		Result: tp,
-		Err:    err,
-	}
 }
 
 func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {

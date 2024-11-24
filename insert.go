@@ -25,8 +25,6 @@ func (o *UpsertBuilder[T]) Update(assigns ...Assignable) *Inserter[T] {
 	return o.i
 }
 
-var _ Handler = (&Inserter[any]{}).execHandler
-
 type Upsert struct {
 	assigns         []Assignable
 	conflictColumns []string
@@ -141,15 +139,11 @@ func (i *Inserter[T]) Build() (*Query, error) {
 }
 
 func (i *Inserter[T]) Exec(ctx context.Context) Result {
-	root := i.execHandler
 
-	for idx := len(i.session.getCore().mdls) - 1; idx >= 0; idx-- {
-		root = i.core.mdls[idx](root)
-	}
-
-	res := root(ctx, &QueryContext{
+	res := exec(ctx, i.session, i.core, &QueryContext{
 		Type:    TypeInsert,
 		Builder: i,
+		Model:   i.model,
 	})
 
 	if res.Result != nil {
@@ -160,26 +154,6 @@ func (i *Inserter[T]) Exec(ctx context.Context) Result {
 
 	return Result{
 		err: res.Err,
-	}
-}
-
-func (i *Inserter[T]) execHandler(ctx context.Context, queryContext *QueryContext) *QueryResult {
-	q, err := i.Build()
-	if err != nil {
-		return &QueryResult{
-			Result: Result{
-				err: err,
-			},
-		}
-	}
-
-	res, err := i.session.execContext(ctx, q.SQL, q.Args...)
-
-	return &QueryResult{
-		Result: Result{
-			res: res,
-			err: err,
-		},
 	}
 }
 
