@@ -12,7 +12,7 @@ type Selectable interface {
 
 type Selector[T any] struct {
 	builder
-	table   string
+	table   TableReference
 	columns []Selectable
 	where   []Predicate
 
@@ -98,10 +98,10 @@ func (s *Selector[T]) Build() (*Query, error) {
 
 	s.sb.WriteString(" FROM ")
 
-	if s.table == "" {
-		s.From(s.model.TableName)
+	err := s.buildTable(s.table)
+	if err != nil {
+		return nil, err
 	}
-	s.sb.WriteString(s.table)
 
 	if len(s.where) > 0 {
 		s.sb.WriteString(" WHERE ")
@@ -123,6 +123,66 @@ func (s *Selector[T]) Build() (*Query, error) {
 		SQL:  s.sb.String(),
 		Args: s.args,
 	}, nil
+}
+
+func (s *Selector[T]) buildTable(table TableReference) error {
+	switch t := table.(type) {
+	case nil:
+		s.quote(s.model.TableName)
+	case Table:
+		m, err := s.r.Get(t.entity)
+		if err != nil {
+			return err
+		}
+		s.quote(m.TableName)
+		if t.alias != "" {
+			s.sb.WriteString(" AS ")
+			s.quote(t.alias)
+		}
+	case Join:
+		s.sb.WriteByte('(')
+		err := s.buildTable(t.left)
+		if err != nil {
+			return err
+		}
+		s.sb.WriteByte(' ')
+		s.sb.WriteString(t.typ)
+		s.sb.WriteByte(' ')
+		err = s.buildTable(t.right)
+		if err != nil {
+			return err
+		}
+
+		if len(t.using) > 0 {
+			s.sb.WriteString(" USING (")
+			for i, col := range t.using {
+				if i > 0 {
+					s.sb.WriteByte(',')
+				}
+				err = s.buildColumn(Column{Name: col})
+				if err != nil {
+					return err
+				}
+			}
+			s.sb.WriteByte(')')
+		}
+
+		if len(t.on) > 0 {
+			s.sb.WriteString(" ON ")
+			p := t.on[0]
+			for i := 1; i < len(t.on); i++ {
+				p = p.And(t.on[i])
+			}
+			if err = s.buildExpression(p); err != nil {
+				return err
+			}
+		}
+
+		s.sb.WriteByte(')')
+	default:
+		return errs.NewErrUnsupportedTable(table)
+	}
+	return nil
 }
 
 func (s *Selector[T]) buildColumns() error {
@@ -165,22 +225,8 @@ func (s *Selector[T]) buildColumns() error {
 	return nil
 }
 
-func (s *Selector[T]) From(table string) *Selector[T] {
-	if table == "" {
-		return s
-	}
-
-	str := ""
-	segs := strings.Split(table, ".")
-
-	for i := 0; i < len(segs); i++ {
-		if i < len(segs)-1 {
-			str += "`" + segs[i] + "`."
-		} else {
-			str += "`" + segs[i] + "`"
-		}
-	}
-	s.table = str
+func (s *Selector[T]) From(table TableReference) *Selector[T] {
+	s.table = table
 	return s
 }
 

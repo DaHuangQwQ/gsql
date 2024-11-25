@@ -3,6 +3,7 @@ package gsql
 type Column struct {
 	Name  string
 	alias string
+	Table TableReference
 }
 
 func C(name string) Column {
@@ -21,6 +22,7 @@ func (c Column) As(alias string) Column {
 	return Column{
 		Name:  c.Name,
 		alias: alias,
+		Table: c.Table,
 	}
 }
 

@@ -19,16 +19,40 @@ func (b *builder) quote(name string) {
 }
 
 func (b *builder) buildColumn(col Column) error {
-	fd, ok := b.model.FieldMap[col.Name]
-	if !ok {
-		return errs.NewErrUnknownField(col.Name)
+	switch table := col.Table.(type) {
+	case nil:
+		fd, ok := b.model.FieldMap[col.Name]
+		if !ok {
+			return errs.NewErrUnknownField(col.Name)
+		}
+		b.quote(fd.ColName)
+		if col.alias != "" {
+			b.sb.WriteString(" AS ")
+			b.quote(col.alias)
+		}
+		return nil
+	case Table:
+		m, err := b.r.Get(table.entity)
+		if err != nil {
+			return err
+		}
+		fd, ok := m.FieldMap[col.Name]
+		if !ok {
+			return errs.NewErrUnknownField(col.Name)
+		}
+		if table.alias != "" {
+			b.quote(table.alias)
+			b.sb.WriteByte('.')
+		}
+		b.quote(fd.ColName)
+		if col.alias != "" {
+			b.sb.WriteString(" AS ")
+			b.quote(col.alias)
+		}
+		return nil
+	default:
+		return errs.NewErrUnsupportedTable(col.Name)
 	}
-	b.quote(fd.ColName)
-	if col.alias != "" {
-		b.sb.WriteString(" AS ")
-		b.quote(col.alias)
-	}
-	return nil
 }
 
 func (b *builder) addArgs(vals ...any) {
