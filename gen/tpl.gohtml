@@ -1,0 +1,25 @@
+package {{ .Package }}
+
+import (
+"github.com/DaHuangQwQ/gsql"
+{{range $idx, $import := .Imports }}
+    {{$import}}
+{{end -}}
+)
+{{- $ops := .Ops -}}
+{{range $i, $type := .Types }}
+
+    const (
+    {{- range $j, $field := .Fields}}
+        {{$type.Name }}{{$field.Name}} = "{{$field.Name}}"
+    {{- end}}
+    )
+
+    {{range $j, $field := .Fields}}
+        {{- range $k, $op := $ops}}
+            func {{$type.Name }}{{$field.Name}}{{$op}}(val {{$field.Type}}) gsql.Predicate {
+            return gsql.C("{{$field.Name}}").{{$op}}(val)
+            }
+        {{end}}
+    {{- end}}
+{{- end}}
