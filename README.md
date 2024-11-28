@@ -41,12 +41,11 @@ func main() {
 		},
 		Age: 18,
 	}).Exec(context.Background())
-	affected, _ := res.RowsAffected()
 	
+	affected, _ := res.RowsAffected()
 	fmt.Println("affected:", affected)
 
 	get, _ := gsql.NewSelector[TestModel](db).Where(gsql.C("Age").Eq(18)).Get(context.Background())
-	
 	fmt.Printf("get: %v", get)
 }
 ```
