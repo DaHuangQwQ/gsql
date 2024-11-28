@@ -1,5 +1,5 @@
 # gsql
-an go easy orm framework
+a go easy orm framework
 
 ```shell
 go get github.com/DaHuangQwQ/gsql
@@ -41,16 +41,12 @@ func main() {
 		},
 		Age: 18,
 	}).Exec(context.Background())
-	affected, err := res.RowsAffected()
-	if err != nil {
-		panic(err)
-	}
+	affected, _ := res.RowsAffected()
+	
 	fmt.Println("affected:", affected)
 
-	get, err := gsql.NewSelector[TestModel](db).Where(gsql.C("Age").Eq(18)).Get(context.Background())
-	if err != nil {
-		panic(err)
-	}
+	get, _ := gsql.NewSelector[TestModel](db).Where(gsql.C("Age").Eq(18)).Get(context.Background())
+	
 	fmt.Printf("get: %v", get)
 }
 ```
